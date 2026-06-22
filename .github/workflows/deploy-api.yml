@@ -74,10 +74,10 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
-            kubectl apply -f k8s/lab-3.2/00-namespace.yaml
-            kubectl apply -f k8s/lab-3.2/01-deployment-v1.yaml
-            kubectl apply -f k8s/lab-3.2/02-service.yaml
-            kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
+            sudo kubectl apply -f k8s/lab-3.2/00-namespace.yaml
+            sudo kubectl apply -f k8s/lab-3.2/01-deployment-v1.yaml
+            sudo kubectl apply -f k8s/lab-3.2/02-service.yaml
+            sudo kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
 
       - name: Rollback automático
         if: failure()
@@ -87,5 +87,5 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
-            kubectl rollout undo deployment/demo-api -n lab32
-            kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
+            sudo kubectl rollout undo deployment/demo-api -n lab32
+            sudo kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
