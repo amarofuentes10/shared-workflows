@@ -75,7 +75,7 @@ jobs:
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
             sudo kubectl apply -f k8s/lab-3.2/00-namespace.yaml
-            sudo kubectl apply -f k8s/lab-3.2/01-deployment-v1.yaml
+            sudo kubectl apply -f k8s/lab-3.2/03-deployment-v2-bad.yaml
             sudo kubectl apply -f k8s/lab-3.2/02-service.yaml
             sudo kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
 
