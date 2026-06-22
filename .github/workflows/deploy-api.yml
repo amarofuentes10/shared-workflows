@@ -74,9 +74,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
-            sudo kubectl apply -f k8s/lab-3.2/00-namespace.yaml
-            sudo kubectl apply -f k8s/lab-3.2/03-deployment-v2-bad.yaml
-            sudo kubectl apply -f k8s/lab-3.2/02-service.yaml
+            sudo kubectl set image deployment/demo-api api=amaroantonio/shared-client:tag-inexistente-ea3 -n lab32
             sudo kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
 
       - name: Rollback automático
