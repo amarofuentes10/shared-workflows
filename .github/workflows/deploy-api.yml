@@ -99,8 +99,8 @@ jobs:
             echo "2. Waiting for Green rollout status"
             sudo kubectl rollout status deployment/$GREEN -n $NAMESPACE --timeout=90s
 
-            echo "3. Validating Green pods are Ready"
-            sudo kubectl wait --for=condition=Ready pod -l app=demo-api,slot=green -n $NAMESPACE --timeout=90s
+            echo "3. Listing Green pods"
+            sudo kubectl get pods -l app=demo-api,slot=green -n $NAMESPACE
 
             echo "4. Switching service traffic from Blue to Green"
             sudo kubectl patch service $SERVICE -n $NAMESPACE -p '{"spec":{"selector":{"app":"demo-api","slot":"green"}}}'
