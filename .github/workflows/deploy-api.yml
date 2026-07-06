@@ -1,4 +1,4 @@
-name: Deploy API to Docker Hub and k3s
+name: Deploy API Blue Green to Docker Hub and k3s
 
 on:
   workflow_call:
@@ -9,6 +9,22 @@ on:
       image-tag:
         required: true
         type: string
+      namespace:
+        required: false
+        type: string
+        default: lab32
+      green-deployment:
+        required: false
+        type: string
+        default: demo-api-green
+      service-name:
+        required: false
+        type: string
+        default: demo-api-bg-svc
+      container-name:
+        required: false
+        type: string
+        default: api
     secrets:
       DOCKER_USERNAME:
         required: true
@@ -22,7 +38,6 @@ on:
 jobs:
   deps-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Descargar código
         uses: actions/checkout@v4
@@ -41,13 +56,12 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     needs: deps-and-test
-
     steps:
       - name: Descargar código
         uses: actions/checkout@v4
 
       - name: Login Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -56,34 +70,58 @@ jobs:
         run: |
           IMAGE="${{ secrets.DOCKER_USERNAME }}/${{ inputs.image-name }}"
           docker build -t "$IMAGE:${{ inputs.image-tag }}" -t "$IMAGE:latest" .
-          docker push --all-tags "$IMAGE"
+          docker push "$IMAGE:${{ inputs.image-tag }}"
+          docker push "$IMAGE:latest"
 
-  deploy-to-k3s:
+  deploy-blue-green:
     runs-on: ubuntu-latest
     needs: build-and-push
-
     steps:
-      - name: Descargar código
-        uses: actions/checkout@v4
-
-      - name: Deploy to k3s
+      - name: Deploy Green, health check and switch traffic
         id: deploy
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ubuntu
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
-            sudo kubectl set image deployment/demo-api api=amaroantonio/shared-client:tag-inexistente-ea3 -n lab32
-            sudo kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
+            set -e
 
-      - name: Rollback automático
+            IMAGE="${{ secrets.DOCKER_USERNAME }}/${{ inputs.image-name }}:${{ inputs.image-tag }}"
+            NAMESPACE="${{ inputs.namespace }}"
+            GREEN="${{ inputs.green-deployment }}"
+            SERVICE="${{ inputs.service-name }}"
+            CONTAINER="${{ inputs.container-name }}"
+
+            echo "1. Updating Green deployment with image: $IMAGE"
+            sudo kubectl set image deployment/$GREEN $CONTAINER=$IMAGE -n $NAMESPACE
+
+            echo "2. Waiting for Green rollout status"
+            sudo kubectl rollout status deployment/$GREEN -n $NAMESPACE --timeout=90s
+
+            echo "3. Validating Green pods are Ready"
+            sudo kubectl wait --for=condition=Ready pod -l app=demo-api,slot=green -n $NAMESPACE --timeout=90s
+
+            echo "4. Switching service traffic from Blue to Green"
+            sudo kubectl patch service $SERVICE -n $NAMESPACE -p '{"spec":{"selector":{"app":"demo-api","slot":"green"}}}'
+
+            echo "5. Blue/Green deployment completed successfully"
+            sudo kubectl get svc $SERVICE -n $NAMESPACE
+            sudo kubectl get pods -n $NAMESPACE
+
+      - name: Automatic rollback if Green validation fails
         if: failure()
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ubuntu
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
-            sudo kubectl rollout undo deployment/demo-api -n lab32
-            sudo kubectl rollout status deployment/demo-api -n lab32 --timeout=60s
+            NAMESPACE="${{ inputs.namespace }}"
+            GREEN="${{ inputs.green-deployment }}"
+            SERVICE="${{ inputs.service-name }}"
+
+            echo "Rollback started: restoring Green deployment and keeping traffic on Blue"
+            sudo kubectl rollout undo deployment/$GREEN -n $NAMESPACE || true
+            sudo kubectl patch service $SERVICE -n $NAMESPACE -p '{"spec":{"selector":{"app":"demo-api","slot":"blue"}}}' || true
+            sudo kubectl get svc $SERVICE -n $NAMESPACE
